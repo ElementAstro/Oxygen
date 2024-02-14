@@ -22,6 +22,7 @@
 #include <getopt.h>
 #ifdef _MSC_VER // Modified for Oxygen Plate Solver
 #include "windirent.h"
+#include <windows.h>
 #else
 #include <dirent.h>
 #endif

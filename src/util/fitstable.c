@@ -13,7 +13,7 @@
 #include "fitsioutils.h"
 #include "fitsfile.h"
 #include "ioutils.h"
-#include "an-endian.h"
+//#include "an-endian.h" //# Modified by Robert Lancaster for the StellarSolver Internal Library
 #include "anqfits.h"
 
 #include "log.h"
@@ -52,11 +52,11 @@ struct fitsext {
 typedef struct fitsext fitsext_t;
 
 
-
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
 static anbool need_endian_flip() {
     return IS_BIG_ENDIAN == 0;
 }
-
+**/
 //static void fitstable_add_columns(fitstable_t* tab, fitscol_t* cols, int Ncols);
 static fitscol_t* fitstable_add_column(fitstable_t* tab, fitscol_t* col);
 static void fitstable_create_table(fitstable_t* tab);
@@ -233,7 +233,7 @@ int fitstable_read_nrows_data(fitstable_t* table, int row0, int nrows,
     }
     return 0;
 }
-
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
 void fitstable_endian_flip_row_data(fitstable_t* table, void* data) {
     int i;
     char* cursor;
@@ -244,23 +244,23 @@ void fitstable_endian_flip_row_data(fitstable_t* table, void* data) {
         int j;
         fitscol_t* col = getcol(table, i);
         for (j=0; j<col->arraysize; j++) {
-            /*
+
              if (col->fitssize == 8)
              printf("col '%s': d=%g, i=%li\n",
              col->colname, *((double*)cursor), *((uint64_t*)cursor));
-             */
-            endian_swap(cursor, col->fitssize);
-            /*
+
+            //endian_swap(cursor, col->fitssize); //# Modified by Robert Lancaster for the StellarSolver Internal Library
+
              if (col->fitssize == 8)
              printf(" --> d=%g, i=%li\n",
              *((double*)cursor), *((uint64_t*)cursor));
-             */
+
 
             cursor += col->fitssize;
         }
     }
 }
-
+**/
 static int write_row_data(fitstable_t* table, void* data, int R) {
     assert(table);
     assert(data);
@@ -291,35 +291,39 @@ int fitstable_copy_rows_data(fitstable_t* intable, int* rows, int N, fitstable_t
     char* buf = NULL;
     int i;
     // We need to endian-flip if we're going from FITS file <--> memory.
-    anbool flip = need_endian_flip() && (in_memory(intable) != in_memory(outtable));
+    //anbool flip = need_endian_flip() && (in_memory(intable) != in_memory(outtable)); //# Modified by Robert Lancaster for the StellarSolver Internal Library
     R = fitstable_row_size(intable);
     buf = malloc(R);
     for (i=0; i<N; i++) {
         if (fitstable_read_row_data(intable, rows ? rows[i] : i, buf)) {
             ERROR("Failed to read data from input table");
+            free(buf); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
             return -1;
         }
         // The in-memory side (input/output) does the flip.
+        /** //# Modified by Robert Lancaster for the StellarSolver Internal Library
         if (flip) {
             if (in_memory(intable))
                 fitstable_endian_flip_row_data(intable, buf);
             else if (in_memory(outtable))
                 fitstable_endian_flip_row_data(outtable, buf);
         }
+        **/
 
         if (write_row_data(outtable, buf, R)) {
             ERROR("Failed to write data to output table");
+            free(buf); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
             return -1;
         }
     }
     free(buf);
     return 0;
 }
-
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
 int fitstable_copy_row_data(fitstable_t* table, int row, fitstable_t* outtable) {
     return fitstable_copy_rows_data(table, &row, 1, outtable);
 }
-
+**/
 int fitstable_row_size(const fitstable_t* t) {
     // FIXME - should this return the size of the *existing* FITS table
     // (when reading), or just the columns we care about (those in "cols")?
@@ -639,19 +643,22 @@ int fitstable_read_structs(fitstable_t* tab, void* struc,
             int sz;
             if (!tab->rows) {
                 ERROR("No data has been written to this fitstable");
+                free(tempdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
                 return -1;
             }
             if (offset + N > bl_size(tab->rows)) {
                 ERROR("Number of data items requested exceeds number of rows: offset %i, n %i, nrows %zu", offset, N, bl_size(tab->rows));
+                free(tempdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
                 return -1;
             }
 
             //logverb("column %i: dest offset %i, stride %i, row offset %i, input offset %i, size %i (%ix%i)\n", i, (int)(dest - struc), stride, offset, off, fitscolumn_get_size(col), col->fitssize, col->arraysize);
             sz = fitscolumn_get_size(col);
             for (j=0; j<N; j++)
-                memcpy(((char*)dest) + j * stride,
-                       ((char*)bl_access(tab->rows, offset+j)) + off,
-                       sz);
+                if(dest) //# Modified by Robert Lancaster for the StellarSolver Internal Library to resolve warning
+                    memcpy(((char*)dest) + j * stride,
+                           ((char*)bl_access(tab->rows, offset+j)) + off,
+                           sz);
         } else {
             // Read from FITS file...
             qfits_query_column_seq_to_array(tab->table, col->col, offset, N, dest, stride);
@@ -698,7 +705,11 @@ static int write_one(fitstable_t* table, const void* struc, anbool flip,
         col = getcol(table, i);
         if (col->in_struct) {
             if (struc)
+#ifdef _MSC_VER //# Modified by Robert Lancaster for the StellarSolver Internal Library
+                columndata = ((char *)struc) + col->coffset;
+#else
                 columndata = struc + col->coffset;
+#endif
             else
                 columndata = NULL;
         } else {
@@ -711,7 +722,7 @@ static int write_one(fitstable_t* table, const void* struc, anbool flip,
         // skips the required number of bytes.
         // This allows both structs and normal columns to coexist
         // (in theory -- is this ever used?)
-        // (yes, by onefield.c when writing rdls and correspondence files
+        // (yes, by blind.c when writing rdls and correspondence files
         //  with tag-along data...)
 
         if (columndata && col->fitstype != col->ctype) {
@@ -726,16 +737,17 @@ static int write_one(fitstable_t* table, const void* struc, anbool flip,
                               col->arraysize, 1);
             columndata = buf;
         }
-		
-        if (in_memory(table)) {
-            int nb = fitscolumn_get_size(col);
-            memcpy(thisrow + rowoff, columndata, nb);
-            rowoff += nb;
-        } else {
-            ret = fits_write_data_array(table->fid, columndata,
-                                        col->fitstype, col->arraysize, flip);
-            if (ret)
-                break;
+        if(columndata){ //# Modified by Robert Lancaster for the StellarSolver Internal Library to correct warning
+            if (in_memory(table)) {
+                int nb = fitscolumn_get_size(col);
+                memcpy(thisrow + rowoff, columndata, nb);
+                rowoff += nb;
+            } else {
+                ret = fits_write_data_array(table->fid, columndata,
+                                            col->fitstype, col->arraysize, flip);
+                if (ret)
+                    break;
+            }
         }
     }
     free(buf);
@@ -827,14 +839,16 @@ int fitstable_write_one_column(fitstable_t* table, int colnum,
     if (in_memory(table)) {
         for (i=0; i<nrows; i++) {
             memcpy(((char*)bl_access(table->rows, rowoffset + i)) + off,
-                   src, (size_t)col->fitssize * (size_t)col->arraysize);
+                   src, col->fitssize * col->arraysize);
             src = ((const char*)src) + src_stride;
         }
     } else {
         for (i=0; i<nrows; i++) {
-            if (fseeko(table->fid, start + (size_t)i * (size_t)table->table->tab_w, SEEK_SET) ||
+            if (fseeko(table->fid, start + i * table->table->tab_w, SEEK_SET) ||
                 fits_write_data_array(table->fid, src, col->fitstype, col->arraysize, flip)) {
                 SYSERROR("Failed to write row %i of column %i", rowoffset+i, colnum);
+                if(buf)
+                    free(buf); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
                 return -1;
             }
             src = ((const char*)src) + src_stride;
@@ -916,7 +930,7 @@ static void* read_array_into(const fitstable_t* tab,
     if (dest)
         cdata = dest;
     else
-        cdata = calloc((size_t)Nread * (size_t)arraysize, csize);
+        cdata = calloc(Nread * arraysize, csize);
 
     if (dest && deststride > 0)
         cstride = deststride;
@@ -927,7 +941,7 @@ static void* read_array_into(const fitstable_t* tab,
     if (csize < fitssize) {
         // Need to allocate a bigger temp array and down-convert the data.
         // HACK - could set data=tempdata and realloc after (if 'dest' is NULL)
-        tempdata = calloc((size_t)Nread * (size_t)arraysize, fitssize);
+        tempdata = calloc(Nread * arraysize, fitssize);
         fitsdata = tempdata;
     } else {
         // We'll read the data into the first fraction of the output array.
@@ -940,10 +954,16 @@ static void* read_array_into(const fitstable_t* tab,
         int sz;
         if (!tab->rows) {
             ERROR("No data has been written to this fitstable");
+            free(tempdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
+            if(cdata)
+                free(cdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
             return NULL;
         }
         if (offset + Nread > bl_size(tab->rows)) {
             ERROR("Number of data items requested exceeds number of rows: offset %i, n %i, nrows %zu", offset, Nread, bl_size(tab->rows));
+            free(tempdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
+            if(cdata)
+                free(cdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
             return NULL;
         }
         off = fits_offset_of_column(tab->table, colnum);
@@ -970,7 +990,9 @@ static void* read_array_into(const fitstable_t* tab,
         }
         if (res) {
             ERROR("Failed to read column from FITS file");
-            // MEMLEAK!
+            free(tempdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
+            if(cdata)
+                free(cdata); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
             return NULL;
         }
     }
@@ -987,7 +1009,7 @@ static void* read_array_into(const fitstable_t* tab,
                               -csize, ctype,
                               fitsdata + (((off_t)Nread*(off_t)arraysize)-1) * (off_t)fitssize,
                               -fitssize, fitstype,
-                              1, (size_t)Nread * (size_t)arraysize);
+                              1, Nread * arraysize);
         }
     }
 
@@ -1204,7 +1226,7 @@ static fitstable_t* open_for_writing(const char* fn, const char* mode, FILE* fid
         tab->fid = fid;
     else {
         tab->fid = fopen(fn, mode);
-        if (!tab->fid && fn) {
+        if (!tab->fid) {
             SYSERROR("Couldn't open output file %s for writing", fn);
             goto bailout;
         }
@@ -1267,23 +1289,30 @@ int fitstable_append_to(fitstable_t* intable, FILE* fid) {
     // swap in the input header.
     tmphdr = outtable->header;
     outtable->header = intable->header;
+
+    int status = 0; //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
     if (fitstable_write_header(outtable)) {
         ERROR("Failed to write output table header");
-        return -1;
+        status = -1;
+        goto exit; //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
     }
     if (fitstable_copy_rows_data(intable, NULL, fitstable_nrows(intable), outtable)) {
         ERROR("Failed to copy rows from input table to output");
-        return -1;
+        status = -1;
+        goto exit; //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
     }
     if (fitstable_fix_header(outtable)) {
         ERROR("Failed to fix output table header");
-        return -1;
+        status = -1;
+        goto exit; //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
     }
     outtable->header = tmphdr;
     // clear this so that fitstable_close() doesn't fclose() it.
     outtable->fid = NULL;
+
+    exit: //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
     fitstable_close(outtable);
-    return 0;
+    return status; //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leak
 }
 
 int fitstable_close(fitstable_t* tab) {
@@ -1575,11 +1604,11 @@ int fitstable_nrows(const fitstable_t* t) {
 
 void fitstable_print_missing(fitstable_t* tab, FILE* f) {
     int i;
-    fprintf(f, "Missing required columns: ");
+    debug("Missing required columns: "); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
     for (i=0; i<ncols(tab); i++) {
         fitscol_t* col = getcol(tab, i);
         if (col->col == -1 && col->required) {
-            fprintf(f, "%s ", col->colname);
+            debug("%s ", col->colname); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         }
     }
 }

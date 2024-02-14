@@ -2,6 +2,9 @@
  # This file is part of the Astrometry.net suite.
  # Licensed under a 3-clause BSD style license - see LICENSE
  */
+#ifdef __GNUC__ //# Modified by Robert Lancaster for the StellarSolver Internal Library
+#define __STDC_WANT_LIB_EXT2__ 1
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -20,11 +23,10 @@
 #include "fitsioutils.h"
 #include "ioutils.h"
 #include "keywords.h"
-#include "an-endian.h"
+//#include "an-endian.h" //# Modified by Robert Lancaster for the StellarSolver Internal Library
 #include "errors.h"
 #include "log.h"
 #include "errors.h"
-#include "mathutil.h"
 
 Malloc
 char* fits_to_string(const qfits_header* hdr, int* size) {
@@ -82,7 +84,11 @@ qfits_table* fits_copy_table(qfits_table* tbl) {
 
 int fits_pixdump(const qfitsdumper * qd) {
     FILE* f_out;
+#ifndef _MSC_VER //# Modified by Robert Lancaster for the StellarSolver Internal Library
     const void* vbuf;
+#else
+    const char* vbuf;
+#endif
     anbool tostdout;
     int i;
     int isize;
@@ -298,17 +304,25 @@ double fits_get_double_val(const qfits_table* table, int column,
     cdata += (table->col[column].off_beg - table->col[0].off_beg);
     if (table->col[column].atom_type == TFITS_BIN_TYPE_E) {
         memcpy(&fval, cdata, sizeof(fval));
+        //Note: This is not what we want to do, but this function doesn't work right now
+        //But I don't think it is used by the solver either.
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
         v32_ntoh(&fval);
+**/
         dval = fval;
         return fval;
     } else if (table->col[column].atom_type == TFITS_BIN_TYPE_D) {
         memcpy(&dval, cdata, sizeof(dval));
+        //Note: This is not what we want to do, but this function doesn't work right now
+        //But I don't think it is used by the solver either.
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
         v64_ntoh(&dval);
+**/
         return dval;
     } else {
-        fprintf(stderr, "Invalid column type %i.\n", table->col[column].atom_type);
+        debug("Invalid column type %i.\n", table->col[column].atom_type); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
     }
-    return LARGE_VAL;
+    return HUGE_VAL;
 }
 
 int fits_is_table_header(const char* key) {
@@ -690,7 +704,7 @@ static int add_long_line(qfits_header* hdr, const char* keyword, const char* ind
     int indlen = (indent ? strlen(indent) : 0);
     len = vasprintf(&origstr, format, lst);
     if (len == -1) {
-        fprintf(stderr, "vasprintf failed: %s\n", strerror(errno));
+        debug("vasprintf failed: %s\n", strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     str = origstr;
@@ -863,7 +877,7 @@ int fits_add_column(qfits_table* table, int column, tfits_type type,
 
     atomsize = fits_get_atom_size(type);
     if (atomsize == -1) {
-        fprintf(stderr, "Unknown atom size for type %i.\n", type);
+        debug("Unknown atom size for type %i.\n", type); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     if (type == TFITS_BIN_TYPE_X)
@@ -892,10 +906,14 @@ int fits_offset_of_column(qfits_table* table, int colnum) {
 
 int fits_write_data_D(FILE* fid, double value, anbool flip) {
     assert(sizeof(double) == 8);
+    //Note: This is not what we want to do, but this function doesn't work right now
+    //But I don't think it is used by the solver either.
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
     if (flip)
         v64_hton(&value);
+**/
     if (fwrite(&value, 8, 1, fid) != 1) {
-        fprintf(stderr, "Failed to write a double to FITS file: %s\n", strerror(errno));
+        debug("Failed to write a double to FITS file: %s\n", strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
@@ -903,10 +921,14 @@ int fits_write_data_D(FILE* fid, double value, anbool flip) {
 
 int fits_write_data_E(FILE* fid, float value, anbool flip) {
     assert(sizeof(float) == 4);
+    //Note: This is not what we want to do, but this function doesn't work right now
+    //But I don't think it is used by the solver either.
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
     if (flip)
         v32_hton(&value);
+**/
     if (fwrite(&value, 4, 1, fid) != 1) {
-        fprintf(stderr, "Failed to write a float to FITS file: %s\n", strerror(errno));
+        debug("Failed to write a float to FITS file: %s\n", strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
@@ -914,7 +936,7 @@ int fits_write_data_E(FILE* fid, float value, anbool flip) {
 
 int fits_write_data_B(FILE* fid, uint8_t value) {
     if (fwrite(&value, 1, 1, fid) != 1) {
-        fprintf(stderr, "Failed to write a bit array to FITS file: %s\n", strerror(errno));
+        debug("Failed to write a bit array to FITS file: %s\n", strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
@@ -933,30 +955,41 @@ int fits_write_data_X(FILE* fid, unsigned char value) {
 }
 
 int fits_write_data_I(FILE* fid, int16_t value, anbool flip) {
+    //Note: This is not what we want to do, but this function doesn't work right now
+    //But I don't think it is used by the solver either.
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
     if (flip)
         v16_hton(&value);
+**/
     if (fwrite(&value, 2, 1, fid) != 1) {
-        fprintf(stderr, "Failed to write a short to FITS file: %s\n", strerror(errno));
+        debug("Failed to write a short to FITS file: %s\n", strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
 }
 
 int fits_write_data_J(FILE* fid, int32_t value, anbool flip) {
+    //Note: This is not what we want to do, but this function doesn't work right now
+    //But I don't think it is used by the solver either.
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
     if (flip)
         v32_hton(&value);
+**/
     if (fwrite(&value, 4, 1, fid) != 1) {
-        fprintf(stderr, "Failed to write an int to FITS file: %s\n", strerror(errno));
+        debug("Failed to write an int to FITS file: %s\n", strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
 }
 
 int fits_write_data_K(FILE* fid, int64_t value, anbool flip) {
+    //Note: This is not what we want to do, but this function doesn't work right now
+    //But I don't think it is used by the solver either.
+/** //# Modified by Robert Lancaster for the StellarSolver Internal Library
     if (flip)
-        v64_hton(&value);
+**/
     if (fwrite(&value, 8, 1, fid) != 1) {
-        fprintf(stderr, "Failed to write an int64 to FITS file: %s\n", strerror(errno));
+        debug("Failed to write an int64 to FITS file: %s\n", strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
@@ -969,9 +1002,9 @@ int fits_write_data_array(FILE* fid, const void* vvalue, tfits_type type,
     const char* pvalue = (const char*)vvalue;
 
     if (pvalue == NULL) {
-        if (fseeko(fid, (size_t)fits_get_atom_size(type) * (size_t)N, SEEK_CUR)) {
-            fprintf(stderr, "Failed to skip %i bytes in fits_write_data_array: %s\n",
-                    fits_get_atom_size(type) * N, strerror(errno));
+        if (fseeko(fid, fits_get_atom_size(type) * N, SEEK_CUR)) {
+            debug("Failed to skip %i bytes in fits_write_data_array: %s\n",
+                    fits_get_atom_size(type) * N, strerror(errno)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
             return -1;
         }
         return 0;
@@ -1016,7 +1049,7 @@ int fits_write_data_array(FILE* fid, const void* vvalue, tfits_type type,
             pvalue += sizeof(unsigned char);
             break;
         default:
-            fprintf(stderr, "fitsioutils: fits_write_data: unknown data type %i.\n", type);
+            debug("fitsioutils: fits_write_data: unknown data type %i.\n", type); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
             rtn = -1;
             break;
         }
@@ -1047,7 +1080,7 @@ static void fits_init_endian_string() {
         uint32_t endian = ENDIAN_DETECTOR;
         unsigned char* cptr = (unsigned char*)&endian;
         fits_endian_string_inited = 1;
-        sprintf(fits_endian_string, "%02x:%02x:%02x:%02x", (uint)cptr[0], (uint)cptr[1], (uint)cptr[2], (uint)cptr[3]);
+        sprintf(fits_endian_string, "%02x:%02x:%02x:%02x", (unsigned int)cptr[0], (unsigned int)cptr[1], (unsigned int)cptr[2], (unsigned int)cptr[3]);
     }
 }
 
@@ -1100,12 +1133,12 @@ qfits_table* fits_get_table_column(const char* fn, const char* colname, int* pco
         start = anqfits_data_start(fits, i);
         if (start == -1) {
             ERROR("Failed to get data start for ext %i", i);
-            return NULL;
+            goto exit; //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leaks
         }
         size = anqfits_data_size(fits, i);
         if (size == -1) {
             ERROR("Failed to get data size for ext %i", i);
-            return NULL;
+            goto exit; //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leaks
         }
         table = anqfits_get_table(fits, i);
         if (!table)
@@ -1116,6 +1149,7 @@ qfits_table* fits_get_table_column(const char* fn, const char* colname, int* pco
             return table;
         }
     }
+    exit: //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leaks
     anqfits_close(fits);
     return NULL;
 }
@@ -1145,13 +1179,16 @@ int fits_find_table_column(const char* fn, const char* colname, off_t* pstart, o
         }
         if (anqfits_get_data_start_and_size(fits, i, pstart, psize)) {
             ERROR("error getting start/size for ext %i in file %s.\n", i, fn);
+            anqfits_close(fits); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leaks
             return -1;
         }
         if (pext) *pext = i;
+        anqfits_close(fits); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leaks
         return 0;
     }
     debug("searched %i extensions in file %s but didn't find a table with a column \"%s\".\n",
           nextens, fn, colname);
+    anqfits_close(fits); //# Modified by Robert Lancaster for the StellarSolver Internal Library, to prevent leaks
     return -1;
 }
 
@@ -1167,7 +1204,7 @@ int fits_find_column(const qfits_table* table, const char* colname) {
 }
 
 void fits_add_uint_size(qfits_header* header) {
-    fits_header_add_int(header, "UINT_SZ", sizeof(uint), "sizeof(uint)");
+    fits_header_add_int(header, "UINT_SZ", sizeof(unsigned int), "sizeof(unsigned int)");
 }
 
 void fits_add_double_size(qfits_header* header) {
@@ -1177,9 +1214,9 @@ void fits_add_double_size(qfits_header* header) {
 int fits_check_uint_size(const qfits_header* header) {
     int uintsz;
     uintsz = qfits_header_getint(header, "UINT_SZ", -1);
-    if (sizeof(uint) != uintsz) {
-        fprintf(stderr, "File was written with sizeof(uint)=%i, but currently sizeof(uint)=%u.\n",
-                uintsz, (uint)sizeof(uint));
+    if (sizeof(unsigned int) != uintsz) {
+        debug("File was written with sizeof(unsigned int)=%i, but currently sizeof(unsigned int)=%u.\n",
+                uintsz, (unsigned int)sizeof(unsigned int)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
@@ -1189,8 +1226,8 @@ int fits_check_double_size(const qfits_header* header) {
     int doublesz;
     doublesz = qfits_header_getint(header, "DUBL_SZ", -1);
     if (sizeof(double) != doublesz) {
-        fprintf(stderr, "File was written with sizeof(double)=%i, but currently sizeof(double)=%u.\n",
-                doublesz, (uint)sizeof(double));
+        debug("File was written with sizeof(double)=%i, but currently sizeof(double)=%u.\n",
+                doublesz, (unsigned int)sizeof(double)); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
@@ -1211,7 +1248,7 @@ int fits_check_endian(const qfits_header* header) {
 
     localstr = fits_get_endian_string();
     if (strcmp(filestr, localstr)) {
-        fprintf(stderr, "File was written with endianness %s, this machine has endianness %s.\n", filestr, localstr);
+        debug("File was written with endianness %s, this machine has endianness %s.\n", filestr, localstr); //# Modified by Robert Lancaster for the StellarSolver Internal Library for logging
         return -1;
     }
     return 0;
